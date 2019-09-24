@@ -756,6 +756,16 @@ PARAM_DEFINE_INT32(COM_FLIGHT_UUID, 0);
 PARAM_DEFINE_INT32(COM_TAKEOFF_ACT, 0);
 
 /**
+ * Throw-to-launch mode
+ *
+ * Enable throw-to-launch mode.
+ *
+ * @group Commander
+ * @boolean
+ */
+PARAM_DEFINE_INT32(COM_TTLAUNCH, 0);
+
+/**
  * Set data link loss failsafe mode
  *
  * The data link loss failsafe will only be entered after a timeout,
@@ -906,4 +916,3 @@ PARAM_DEFINE_INT32(COM_ASPD_FS_ACT, 0);
  * @category Developer
  */
 PARAM_DEFINE_INT32(COM_ASPD_FS_DLY, 0);
-

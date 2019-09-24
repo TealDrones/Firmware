@@ -246,37 +246,38 @@ PWMSim::run()
 				_actuator_outputs.output[i] = NAN;
 			}
 
-			/* iterate actuators */
-			for (unsigned i = 0; i < _actuator_outputs.noutputs; i++) {
-				/* last resort: catch NaN, INF and out-of-band errors */
-				const bool sane_mixer_output = PX4_ISFINITE(_actuator_outputs.output[i]) &&
-							       _actuator_outputs.output[i] >= -1.0f &&
-							       _actuator_outputs.output[i] <= 1.0f;
-
-				if (_armed && sane_mixer_output) {
-					/* scale for PWM output 1000 - 2000us */
-					_actuator_outputs.output[i] = 1500 + (500 * _actuator_outputs.output[i]);
-					_actuator_outputs.output[i] = math::constrain(_actuator_outputs.output[i], (float)_pwm_min[i], (float)_pwm_max[i]);
-
-				} else {
-					/* Disarmed or insane value - set disarmed pwm value
-					 * This will be clearly visible on the servo status and will limit the risk of accidentally
-					 * spinning motors. It would be deadly in flight. */
+			/* overwrite outputs in case of lockdown */
+			if (_lockdown) {
+				for (unsigned i = 0; i < _actuator_outputs.noutputs; i++) {
 					_actuator_outputs.output[i] = PWM_SIM_DISARMED_MAGIC;
+				}
+
+			} else {
+				/* iterate actuators */
+				for (unsigned i = 0; i < _actuator_outputs.noutputs; i++) {
+					/* last resort: catch NaN, INF and out-of-band errors */
+					const bool sane_mixer_output = PX4_ISFINITE(_actuator_outputs.output[i]) &&
+								       _actuator_outputs.output[i] >= -1.0f &&
+								       _actuator_outputs.output[i] <= 1.0f;
+
+					if (_armed && sane_mixer_output) {
+						/* scale for PWM output 1000 - 2000us */
+						_actuator_outputs.output[i] = 1500 + (500 * _actuator_outputs.output[i]);
+						_actuator_outputs.output[i] = math::constrain(_actuator_outputs.output[i], (float)_pwm_min[i], (float)_pwm_max[i]);
+
+					} else {
+						/* Disarmed or insane value - set disarmed pwm value
+						 * This will be clearly visible on the servo status and will limit the risk of accidentally
+						 * spinning motors. It would be deadly in flight. */
+						_actuator_outputs.output[i] = PWM_SIM_DISARMED_MAGIC;
+					}
 				}
 			}
 
 			/* overwrite outputs in case of force_failsafe */
 			if (_failsafe) {
-				for (size_t i = 0; i < _actuator_outputs.noutputs; i++) {
+				for (unsigned i = 0; i < _actuator_outputs.noutputs; i++) {
 					_actuator_outputs.output[i] = PWM_SIM_FAILSAFE_MAGIC;
-				}
-			}
-
-			/* overwrite outputs in case of lockdown */
-			if (_lockdown) {
-				for (size_t i = 0; i < _actuator_outputs.noutputs; i++) {
-					_actuator_outputs.output[i] = 0.0;
 				}
 			}
 

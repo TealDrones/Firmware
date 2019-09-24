@@ -159,6 +159,8 @@ static struct cpuload_s cpuload = {};
 static bool warning_action_on = false;
 static bool last_overload = false;
 
+static bool in_throw_to_launch = false;
+
 static struct vehicle_status_flags_s status_flags = {};
 
 static uint64_t rc_signal_lost_timestamp;		// Time at which the RC reception was lost
@@ -1203,6 +1205,7 @@ Commander::run()
 	param_t _param_arm_mission_required = param_find("COM_ARM_MIS_REQ");
 	param_t _param_flight_uuid = param_find("COM_FLIGHT_UUID");
 	param_t _param_takeoff_finished_action = param_find("COM_TAKEOFF_ACT");
+	param_t _param_throw_to_launch_enabled = param_find("COM_TTLAUNCH");
 
 	param_t _param_fmode_1 = param_find("COM_FLTMODE1");
 	param_t _param_fmode_2 = param_find("COM_FLTMODE2");
@@ -1350,6 +1353,9 @@ Commander::run()
 
 	int32_t takeoff_complete_act = 0;
 
+	/* Throw-to-launch mode on/off flag */
+	int32_t throw_to_launch_enabled = 0;
+
 	/* Thresholds for engine failure detection */
 	float ef_throttle_thres = 1.0f;
 	float ef_current2throttle_thres = 0.0f;
@@ -1471,6 +1477,8 @@ Commander::run()
 			param_get(_param_posctl_nav_loss_act, &posctl_nav_loss_act);
 
 			param_get(_param_takeoff_finished_action, &takeoff_complete_act);
+
+			param_get(_param_throw_to_launch_enabled, &throw_to_launch_enabled);
 
 			/* check for unsafe Airmode settings: yaw airmode requires the use of an arming switch */
 			if (_param_airmode != PARAM_INVALID && _param_rc_map_arm_switch != PARAM_INVALID) {
@@ -1664,6 +1672,20 @@ Commander::run()
 		estimator_check(&status_changed);
 		airspeed_use_check();
 
+		/* locks/unlocks motors */
+		if (throw_to_launch_enabled) {
+			if (!armed.armed && in_throw_to_launch) {
+				in_throw_to_launch = false; // reset flag if disarmed
+				armed.lockdown = false;
+				armed.manual_lockdown = false;
+
+			} else if (armed.armed && !in_throw_to_launch && (!armed.lockdown || !armed.manual_lockdown)) {
+				mavlink_and_console_log_info(&mavlink_log_pub, "In throw-to-launch mode. Motors locked");
+				armed.lockdown = true;
+				armed.manual_lockdown = true;
+			}
+		}
+
 		/* Update land detector */
 		orb_check(land_detector_sub, &updated);
 
@@ -1672,6 +1694,20 @@ Commander::run()
 
 			// Only take actions if armed
 			if (armed.armed) {
+				if (was_falling != land_detector.freefall) {
+					if (land_detector.freefall) {
+						if (! throw_to_launch_enabled) {
+							mavlink_and_console_log_info(&mavlink_log_pub, "Freefall detected");
+
+						} else {
+							mavlink_and_console_log_info(&mavlink_log_pub, "Launched by throw");
+							in_throw_to_launch = true;
+							armed.lockdown = false;   // unlock motors
+							armed.manual_lockdown = false;
+						}
+					}
+				}
+
 				if (was_landed != land_detector.landed) {
 					if (land_detector.landed) {
 						mavlink_and_console_log_info(&mavlink_log_pub, "Landing detected");
@@ -1686,12 +1722,6 @@ Commander::run()
 						_gpos_probation_time_us = _param_com_pos_fs_prob.get() * 1_s;
 						_lpos_probation_time_us = _param_com_pos_fs_prob.get() * 1_s;
 						_lvel_probation_time_us = _param_com_pos_fs_prob.get() * 1_s;
-					}
-				}
-
-				if (was_falling != land_detector.freefall) {
-					if (land_detector.freefall) {
-						mavlink_and_console_log_info(&mavlink_log_pub, "Freefall detected");
 					}
 				}
 			}
